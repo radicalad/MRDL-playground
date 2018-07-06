@@ -30,7 +30,7 @@ namespace MRDL.Controls
         [Range(0, 1)]
         public float DragTimeThreshold = 0.22f;
 
-        private Transform scrollContainer;
+        private GameObject scrollContainer;
         private ScrollBoundsGroup scrollBounds;
 
         private Bounds collectionBounds = new Bounds();
@@ -73,7 +73,7 @@ namespace MRDL.Controls
                 }
             }
 
-            public void InstantiateBounds()
+            public void InstantiateBounds(Transform parent)
             {
                 BoundsList = new List<Transform>();
 
@@ -101,6 +101,8 @@ namespace MRDL.Controls
                     Destroy( t.GetComponent<BoxCollider>() );
                     t.gameObject.layer = 2;
 
+                    t.parent = parent;
+
                     // apply the unlit shader to our primitives so we can't see them
                     t.gameObject.GetComponent<Renderer>().material.shader = hidden;
                     t.gameObject.GetComponent<Renderer>().material.color = Color.black;
@@ -110,11 +112,8 @@ namespace MRDL.Controls
 
         public override void OnEnable()
         {
-            Debug.Log(scrollTarget.transform.position);
+//            Debug.Log(scrollTarget.transform.position);
             base.OnEnable();
-            //Go get all of our bounds objects
-            scrollBounds = new ScrollBoundsGroup();
-            scrollBounds.InstantiateBounds();
         }
 
         // Use this for initialization
@@ -128,15 +127,23 @@ namespace MRDL.Controls
             else
             {
                 //Find our scroll container & parent the scrollTarget to it
-                scrollContainer = this.transform.Find("ScrollContainer");
+                scrollContainer = new GameObject();
+                scrollContainer.name = "Container";
+                scrollContainer.transform.parent = this.transform;
+                scrollContainer.transform.position = Vector3.zero;
+                
                 this.transform.position = scrollTarget.transform.position;
                 this.transform.rotation = scrollTarget.transform.rotation;
-                scrollTarget.transform.parent = scrollContainer;
+
+                scrollTarget.transform.parent = scrollContainer.transform;
 
                 scrollTarget.transform.position = Vector3.zero;
                 scrollTarget.transform.rotation = Quaternion.identity;
 
-                Debug.Log(scrollTarget.transform.position);
+                //Go get all of our bounds objects
+                scrollBounds = new ScrollBoundsGroup();
+                scrollBounds.InstantiateBounds(this.transform);
+
             }
 
             LayerMask ignoreLayers = (1 << 2); // Ignore Raycast Layer
@@ -271,25 +278,25 @@ namespace MRDL.Controls
 
                     if(handDelta.y > 0f)
                     {
-                        if (scrollContainer.position.y < maxY)
+                        if (scrollContainer.transform.position.y < maxY)
                         {
-                            scrollContainer.position += newPos;
+                            scrollContainer.transform.position += newPos;
                         }
                         else
                         {
-                            newPos.Set(scrollContainer.position.x, maxY, scrollContainer.position.z);
-                            scrollContainer.position = newPos;
+                            newPos.Set(scrollContainer.transform.position.x, maxY, scrollContainer.transform.position.z);
+                            scrollContainer.transform.position = newPos;
                         }
                     }
                     else if (handDelta.y < 0f)
                     {
-                        if(scrollContainer.position.y > minY)
+                        if(scrollContainer.transform.position.y > minY)
                         {
-                            scrollContainer.position += newPos;
+                            scrollContainer.transform.position += newPos;
                         } else
                         {
-                            newPos.Set(scrollContainer.position.x, minY, scrollContainer.position.z);
-                            scrollContainer.position = newPos;
+                            newPos.Set(scrollContainer.transform.position.x, minY, scrollContainer.transform.position.z);
+                            scrollContainer.transform.position = newPos;
                         }
                     }
 
