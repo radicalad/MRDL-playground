@@ -48,12 +48,18 @@ namespace MRDL.Controls
         private float InitialPressTime;
         private float CurrentPressTime;
 
+        private struct ObjectCollectionValueStorage
+        {
+
+        }
+
         private struct ScrollBoundsGroup
         {
             public Transform TopBounds;
             public Transform BottomBounds;
             public Transform LeftBounds;
             public Transform RightBounds;
+            public List<Transform> BoundsList { get; private set; }
             public MeshFilter[] BoundsMeshFilter
             {
                 get
@@ -66,13 +72,49 @@ namespace MRDL.Controls
                     return meshes;
                 }
             }
+
+            public void InstantiateBounds()
+            {
+                BoundsList = new List<Transform>();
+
+                TopBounds = GameObject.CreatePrimitive(PrimitiveType.Cube).transform;
+                BottomBounds = GameObject.CreatePrimitive(PrimitiveType.Cube).transform;
+                LeftBounds = GameObject.CreatePrimitive(PrimitiveType.Cube).transform;
+                RightBounds = GameObject.CreatePrimitive(PrimitiveType.Cube).transform;
+
+                TopBounds.gameObject.name = "TopBounds";
+                BottomBounds.gameObject.name = "BottomBounds";
+                LeftBounds.gameObject.name = "LeftBounds";
+                RightBounds.gameObject.name = "RightBounds";
+
+                BoundsList.Add(TopBounds);
+                BoundsList.Add(BottomBounds);
+                BoundsList.Add(LeftBounds);
+                BoundsList.Add(RightBounds);
+                
+                //Find the unlit shader once
+                Shader hidden = Shader.Find("Unlit/Color");
+                
+                foreach (Transform t in BoundsList)
+                {
+                    //Hide object, destroy the box collider, and set the layer to ignore raycast
+                    Destroy( t.GetComponent<BoxCollider>() );
+                    t.gameObject.layer = 2;
+
+                    // apply the unlit shader to our primitives so we can't see them
+                    t.gameObject.GetComponent<Renderer>().material.shader = hidden;
+                    t.gameObject.GetComponent<Renderer>().material.color = Color.black;
+                }
+            }
         }
 
         public override void OnEnable()
         {
+            Debug.Log(scrollTarget.transform.position);
             base.OnEnable();
             //Go get all of our bounds objects
-            scrollBounds = GetBoundsObjects();
+            scrollBounds = new ScrollBoundsGroup();
+            scrollBounds.InstantiateBounds();
         }
 
         // Use this for initialization
@@ -87,13 +129,20 @@ namespace MRDL.Controls
             {
                 //Find our scroll container & parent the scrollTarget to it
                 scrollContainer = this.transform.Find("ScrollContainer");
+                this.transform.position = scrollTarget.transform.position;
+                this.transform.rotation = scrollTarget.transform.rotation;
                 scrollTarget.transform.parent = scrollContainer;
+
+                scrollTarget.transform.position = Vector3.zero;
+                scrollTarget.transform.rotation = Quaternion.identity;
+
+                Debug.Log(scrollTarget.transform.position);
             }
 
             LayerMask ignoreLayers = (1 << 2); // Ignore Raycast Layer
             List<Vector3> boundsPoints = new List<Vector3>();
 
-            GetRenderBoundsPoints(scrollTarget.gameObject, boundsPoints, ignoreLayers);
+            HoloToolkit.Unity.UX.BoundingBox.GetRenderBoundsPoints(scrollTarget.gameObject, boundsPoints, ignoreLayers);
 
             //Convert all collection points to local space
             for (int i = 0; i < boundsPoints.Count; i++)
@@ -118,14 +167,16 @@ namespace MRDL.Controls
 
                     scrollBounds.TopBounds.localScale = CalculateScale(scrollBounds.TopBounds.GetComponent<MeshRenderer>().bounds, collectionBounds);
                     scrollBounds.BottomBounds.localScale = CalculateScale(scrollBounds.BottomBounds.GetComponent<MeshRenderer>().bounds, collectionBounds);
-
+                    scrollBounds.LeftBounds.gameObject.SetActive(false);
+                    scrollBounds.RightBounds.gameObject.SetActive(false);
                     break;
 
                 case ScrollType.LeftAndRight:
 
                     scrollBounds.LeftBounds.localScale = CalculateScale(scrollBounds.LeftBounds.GetComponent<MeshRenderer>().bounds, collectionBounds);
                     scrollBounds.RightBounds.localScale = CalculateScale(scrollBounds.RightBounds.GetComponent<MeshRenderer>().bounds, collectionBounds);
-
+                    scrollBounds.TopBounds.gameObject.SetActive(false);
+                    scrollBounds.BottomBounds.gameObject.SetActive(false);
                     break;
 
                 case ScrollType.AllDirections:
@@ -178,13 +229,81 @@ namespace MRDL.Controls
         // Update is called once per frame
         void Update()
         {
-            //currentHandPos = MRDL.Utility.InputHelper.GetHandPos(currentInputSource, currentInputSourceId);
 
             if(isPressed && DragTimeTest(InitialPressTime, Time.time, DragTimeThreshold))
             {
-                Debug.Log("This was a drag");
+                currentHandPos = MRDL.Utility.InputHelper.GetHandPos(currentInputSource, currentInputSourceId);
+                CalculateDragMove();
             }
         }
+
+
+        private void CalculateDragMove()
+        {
+
+            //vars we'll need:
+            //currentHandPos
+            //initialHandPos
+            //scrollAreaScrollSize
+            //scrollTarget.CellHeight -- calculate precentage from total number of cells
+            //scrollTarget.CellWidth
+            //
+            //scrollContainer -- object to scroll
+
+            int totalItems = scrollTarget.NodeList.Count;
+            Vector3 handDelta = initialHandPos - currentHandPos;
+            float scrollAreaOffset = (totalItems * scrollTarget.CellHeight) - (scrollAreaScrollSize * scrollTarget.CellHeight);
+            float maxY = scrollBounds.TopBounds.position.y - (scrollAreaScrollSize * scrollTarget.CellHeight);
+            float minY = scrollBounds.BottomBounds.position.y + (scrollAreaScrollSize * scrollTarget.CellHeight);
+            //float maxX = scrollBounds.RightBounds.position.y;
+            //float minX = scrollBounds.LeftBounds.position.y;
+
+            float amountToScroll = ((totalItems * scrollTarget.CellHeight) - (scrollAreaScrollSize * scrollTarget.CellHeight)) / handDelta.y;
+
+            //Debug.Log("amount to scroll" + amountToScroll);
+            Debug.Log(handDelta.y.ToString("F5"));
+            switch (scrollDirection)
+            {
+                case ScrollType.UpAndDown:
+                default:
+
+                    Vector3 newPos = new Vector3(0f, handDelta.y, 0f);
+
+                    if(handDelta.y > 0f)
+                    {
+                        if (scrollContainer.position.y < maxY)
+                        {
+                            scrollContainer.position += newPos;
+                        }
+                        else
+                        {
+                            newPos.Set(scrollContainer.position.x, maxY, scrollContainer.position.z);
+                            scrollContainer.position = newPos;
+                        }
+                    }
+                    else if (handDelta.y < 0f)
+                    {
+                        if(scrollContainer.position.y > minY)
+                        {
+                            scrollContainer.position += newPos;
+                        } else
+                        {
+                            newPos.Set(scrollContainer.position.x, minY, scrollContainer.position.z);
+                            scrollContainer.position = newPos;
+                        }
+                    }
+
+                    break;
+                case ScrollType.LeftAndRight:
+
+                    break;
+                case ScrollType.AllDirections:
+                    break;
+            }
+
+
+        }
+
 
         private bool DragTimeTest(float initTime, float currTime, float pressMargin)
         {
@@ -194,54 +313,6 @@ namespace MRDL.Controls
             }
             return false;
         }
-
-        private ScrollBoundsGroup GetBoundsObjects()
-        {
-            ScrollBoundsGroup bounds = new ScrollBoundsGroup();
-
-            foreach (Transform child in this.transform)
-            {
-                //I'm sure there is a more efficient way to do this...
-                if (child.name == "TopBounds")
-                {
-                    bounds.TopBounds = child;
-                }
-                if (child.name == "BottomBounds")
-                {
-                    bounds.BottomBounds = child;
-                }
-                if (child.name == "LeftBounds")
-                {
-                    bounds.LeftBounds = child;
-                }
-                if (child.name == "RightBounds")
-                {
-                    bounds.RightBounds = child;
-                }
-            }
-            return bounds;
-        }
-
-
-        public static void GetRenderBoundsPoints(GameObject target, List<Vector3> boundsPoints, LayerMask ignoreLayers)
-        {
-            Renderer[] renderers = target.GetComponentsInChildren<Renderer>();
-            for (int i = 0; i < renderers.Length; ++i)
-            {
-                var rendererObj = renderers[i];
-                if (ignoreLayers == (1 << rendererObj.gameObject.layer | ignoreLayers))
-                {
-                    continue;
-                }
-
-                rendererObj.bounds.GetCornerPositionsFromRendererBounds(ref corners);
-                boundsPoints.AddRange(corners);
-            }
-        }
-
-
-        private static Vector3[] corners = null;
-        private static Vector3[] rectTransformCorners = new Vector3[4];
 
         private Vector3 CalculateScale(Bounds objBounds, Bounds otherBounds)
         {
