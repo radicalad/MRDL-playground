@@ -292,6 +292,13 @@ namespace MRDL.Controls
         {
             isPressed = false;
             scrollVelocity = 0.0f;
+
+            //prevent the up event from going out to the scrolled objects if the timecheck was successful
+            if (DragTimeTest(InitialPressTime, Time.time, DragTimeThreshold))
+            {
+                eventData.Use();
+                Debug.Log("Receiver caught up event");
+            }            
         }
 
 
@@ -330,7 +337,7 @@ namespace MRDL.Controls
                     {
                         Debug.Log("hand delta is negative");
                         scrollVelocity += AccelerationRate * Time.deltaTime;
-                        scrollContainer.transform.position = Vector3.MoveTowards(this.transform.position, new Vector3(0f, minY, 0f), scrollVelocity);
+                        scrollContainer.transform.position = Vector3.MoveTowards(this.transform.position, new Vector3(0f, 0f, 0f), scrollVelocity);
                     }
 
                     //scrollVelocity = Mathf.Clamp(scrollVelocity, FinalVelocity * -1, FinalVelocity);

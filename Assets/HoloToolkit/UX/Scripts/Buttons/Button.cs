@@ -155,6 +155,7 @@ namespace HoloToolkit.Unity.Buttons
             {
                 if (ButtonPressFilter == InteractionSourcePressInfo.None || ButtonPressFilter == eventData.PressType)
                 {
+                    Debug.Log("I got to handle my own up event");
                     DoButtonReleased();
                 }
             }
